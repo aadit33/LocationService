@@ -185,7 +185,7 @@ public class CoordinateManager {
         }
 
         if (location.getAccuracy() <= 0) {
-            Log.d(TAG, "Latitidue and longitude values are invalid.");
+            Log.d(TAG, "Latitid and longitude values are invalid.");
             // noAccuracyLocationList.add(location);
             return false;
         }
@@ -195,7 +195,7 @@ public class CoordinateManager {
         if (horizontalAccuracy > 10) { //10meter filter
             Log.d(TAG, "Accuracy is too low.");
             // inaccurateLocationList.add(location);
-            disposeBag.notifyAll(new TTNewLocation(location.getLatitude(), location.getLongitude(), false));
+            disposeBag.notifyAll(new TTNewLocation(location.getLatitude(), location.getLongitude(), false, location.getAccuracy()));
             return false;
         }
 
@@ -238,7 +238,7 @@ public class CoordinateManager {
                 + "lon" + predictedLocation.getLongitude());
         Log.d(TAG, "Location quality is good enough.");
         //Code to notify all observers that we got a good location
-        disposeBag.notifyAll(new TTNewLocation(predictedLocation.getLatitude(), predictedLocation.getLongitude(), true));
+        disposeBag.notifyAll(new TTNewLocation(predictedLocation.getLatitude(), predictedLocation.getLongitude(), true, predictedLocation.getAccuracy()));
         return true;
     }
 
