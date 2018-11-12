@@ -6,10 +6,12 @@ import android.app.Activity;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.os.Build;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.util.Log;
 
 import com.google.android.gms.common.api.ApiException;
@@ -34,6 +36,8 @@ import java.util.List;
 import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.observers.DisposableObserver;
 import io.reactivex.subjects.BehaviorSubject;
+
+import static android.os.Build.VERSION_CODES.M;
 
 public class CoordinateManager {
     private Activity context;
@@ -67,7 +71,8 @@ public class CoordinateManager {
         createLocationCallback();
         createLocationRequest();
         buildLocationSettingsRequest();
-        startLocationUpdates();
+        setRunTimePermission();
+        // startLocationUpdates();
     }
 
     private void createLocationCallback() {
@@ -95,6 +100,31 @@ public class CoordinateManager {
         LocationSettingsRequest.Builder builder = new LocationSettingsRequest.Builder();
         builder.addLocationRequest(mLocationRequest);
         mLocationSettingsRequest = builder.build();
+    }
+
+    private void setRunTimePermission() {
+        if (Build.VERSION.SDK_INT >= M) {
+            if (checkPermission()) {
+                //  Log.d(TAG, "ALREADY GIVEN PERMISSION ");
+                startLocationUpdates();
+
+            } else {
+                //set location permission
+                //  Log.d(TAG, "SHOW PERMISSION DIALOG");
+                ActivityCompat.requestPermissions(context
+                        , new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
+            }
+        } else {
+            //Log.d(TAG, "NO RUN TIME PERMISSION FOR < 6  ");
+            startLocationUpdates();
+        }
+    }
+
+    private boolean checkPermission() {
+        int result = ContextCompat.checkSelfPermission(context
+                , android.Manifest.permission.ACCESS_FINE_LOCATION);
+        return result == PackageManager.PERMISSION_GRANTED;
+
     }
 
     private void startLocationUpdates() {
@@ -160,6 +190,23 @@ public class CoordinateManager {
                 }
                 break;
             default:
+        }
+    }
+
+    public void onRequestPermissionResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults) {
+        switch (requestCode) {
+            case REQUEST_PERMISSIONS_REQUEST_CODE:
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Log.d(TAG, "CLICKED ALLOW PERMISSION GRANTED ");
+                    startLocationUpdates();
+                } else {
+                    //  noPermisAlert();
+                    // Log.d(TAG, "CLICKED  DENIED & DONT ALLOW ");
+                }
+                break;
+            default:
+                //noPermisAlert();
+//        }
         }
     }
 
