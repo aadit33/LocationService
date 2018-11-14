@@ -54,6 +54,7 @@ public class CoordinateManager {
     private Location mCurrentLocation;
     private boolean mRequestingLocationUpdates;
     private boolean failedCoordinate = false;
+    public static boolean grantedPermission = false;
     private String TAG = "PERMISSION ";
     KalmanLatLong kalmanFilter;
     long runStartTimeInMillis;
@@ -199,6 +200,7 @@ public class CoordinateManager {
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Log.d(TAG, "CLICKED ALLOW PERMISSION GRANTED ");
                     startLocationUpdates();
+                    grantedPermission = true;
                 } else {
                     //  noPermisAlert();
                     // Log.d(TAG, "CLICKED  DENIED & DONT ALLOW ");
