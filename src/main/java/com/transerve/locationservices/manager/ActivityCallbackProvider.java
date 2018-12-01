@@ -26,7 +26,7 @@ public class ActivityCallbackProvider {
     }
 
     public static ActivityCallbackProvider getMocker() {
-        return null;
+        return new MockActivityCallbackProvider();
     }
 
     public Task checkLocationSettings(LocationSettingsRequest mLocationSettingsRequest) {
@@ -50,5 +50,9 @@ public class ActivityCallbackProvider {
         } catch (IntentSender.SendIntentException e1) {
             Log.i(TAG, "PendingIntent unable to execute request.");
         }
+    }
+
+    public boolean isAttached() {
+        return true;
     }
 }

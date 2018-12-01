@@ -52,6 +52,7 @@ public class CoordinateManager {
     private LocationSettingsRequest mLocationSettingsRequest;
     private LocationCallback mLocationCallback;
     public static boolean grantedPermission = false;
+    public static boolean locationUpdateStarted = false;
     private String TAG = "PERMISSION ";
     KalmanLatLong kalmanFilter;
     long runStartTimeInMillis;
@@ -69,10 +70,14 @@ public class CoordinateManager {
         buildLocationSettingsRequest();
         setRunTimePermission();
         activityCallback = ActivityCallbackProvider.getMocker();
+        locationUpdateStarted = false;
     }
 
     public void activityAttached(Activity activity) {
         activityCallback = new ActivityCallbackProvider(activity);
+        if (!locationUpdateStarted) {
+            startLocationUpdates();
+        }
     }
 
     public void activityDetached() {
@@ -111,7 +116,7 @@ public class CoordinateManager {
             } else {
                 //set location permission
                 //  Log.d(TAG, "SHOW PERMISSION DIALOG");
-                if (getActivityCallback() == null) {
+                if (!getActivityCallback().isAttached()) {
                     Log.e("PERMISSION", "PERMISSION NOT GRANTED FOR LOCATION");
                 } else {
                     getActivityCallback().requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
@@ -135,9 +140,19 @@ public class CoordinateManager {
         return getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION);
     }
 
+    @SuppressLint("MissingPermission")
     private void startLocationUpdates() {
-        if (getActivityCallback() == null) {
+        if (!getActivityCallback().isAttached()) {
             Log.w("", "No activity is attached to location manager");
+            //Here we will start without checking the conditions since we don't
+            //have the context but it might be running in the background
+            try {
+                requestLocationUpdates();
+            }
+            catch (Exception e) {
+                Log.e(TAG, "startLocationUpdates: Error occurred might be since there is no activity attached");
+                locationUpdateStarted = false;
+            }
         } else {
             // Begin by checking if the device has the necessary location settings.
             getActivityCallback().checkLocationSettings(mLocationSettingsRequest)
@@ -149,8 +164,7 @@ public class CoordinateManager {
                             if (!getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
                                 return;
                             }
-                            mFusedLocationClient.requestLocationUpdates(mLocationRequest,
-                                    mLocationCallback, Looper.myLooper());
+                            requestLocationUpdates();
                         }
                     })
                     .addOnFailureListener(new OnFailureListener() {
@@ -161,7 +175,7 @@ public class CoordinateManager {
                                 case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
                                     Log.i(TAG, "Location settings are not satisfied. Attempting to upgrade " +
                                             "location settings ");
-                                    if (getActivityCallback() == null) {
+                                    if (!getActivityCallback().isAttached()) {
                                         Log.e("PERMISSION", "LOCATION SERVICES ARE DISABLED");
                                     } else {
                                         getActivityCallback().showGPSSettingDialog(e, REQUEST_CHECK_SETTINGS);
@@ -185,8 +199,7 @@ public class CoordinateManager {
                         if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)) {
                             return;
                         }
-                        mFusedLocationClient.requestLocationUpdates(mLocationRequest
-                                , mLocationCallback, Looper.myLooper());
+                        requestLocationUpdates();
                         break;
                     case Activity.RESULT_CANCELED:
                         break;
@@ -195,6 +208,13 @@ public class CoordinateManager {
                 break;
             default:
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void requestLocationUpdates() {
+        mFusedLocationClient.requestLocationUpdates(mLocationRequest
+                , mLocationCallback, Looper.myLooper());
+        locationUpdateStarted = true;
     }
 
     public void onRequestPermissionResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults) {
