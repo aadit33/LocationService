@@ -3,6 +3,7 @@ package com.transerve.locationservices.manager;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.Application;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.location.Location;
@@ -40,20 +41,16 @@ import io.reactivex.subjects.BehaviorSubject;
 import static android.os.Build.VERSION_CODES.M;
 
 public class CoordinateManager {
-    private Activity context;
     private static final int REQUEST_PERMISSIONS_REQUEST_CODE = 34;
     private static final int REQUEST_CHECK_SETTINGS = 0x1;
     private static final long UPDATE_INTERVAL_IN_MILLISECONDS = 5000;
     private static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS =
             UPDATE_INTERVAL_IN_MILLISECONDS / 2;
     private FusedLocationProviderClient mFusedLocationClient;
-    private SettingsClient mSettingsClient;
+    private ActivityCallbackProvider activityCallback;
     private LocationRequest mLocationRequest;
     private LocationSettingsRequest mLocationSettingsRequest;
     private LocationCallback mLocationCallback;
-    private Location mCurrentLocation;
-    private boolean mRequestingLocationUpdates;
-    private boolean failedCoordinate = false;
     public static boolean grantedPermission = false;
     private String TAG = "PERMISSION ";
     KalmanLatLong kalmanFilter;
@@ -61,11 +58,9 @@ public class CoordinateManager {
     float currentSpeed = 0.0f; // meters/second
     private LocationObserver disposeBag;
 
-    public CoordinateManager(Activity context) {
-        this.context = context;
+    public CoordinateManager(Application application) {
         disposeBag = new LocationObserver();
-        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(context);
-        mSettingsClient = LocationServices.getSettingsClient(context);
+        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(application);
         kalmanFilter = new KalmanLatLong(3);
         // Kick off the process of building the LocationCallback, LocationRequest, and
         // LocationSettingsRequest objects.
@@ -73,7 +68,15 @@ public class CoordinateManager {
         createLocationRequest();
         buildLocationSettingsRequest();
         setRunTimePermission();
-        // startLocationUpdates();
+        activityCallback = ActivityCallbackProvider.getMocker();
+    }
+
+    public void activityAttached(Activity activity) {
+        activityCallback = new ActivityCallbackProvider(activity);
+    }
+
+    public void activityDetached() {
+        activityCallback = null;
     }
 
     private void createLocationCallback() {
@@ -81,16 +84,13 @@ public class CoordinateManager {
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 super.onLocationResult(locationResult);
-                mCurrentLocation = locationResult.getLastLocation();
                 filterAndAddLocation(locationResult.getLastLocation());
             }
         };
     }
 
     private void createLocationRequest() {
-
         runStartTimeInMillis = (long) (SystemClock.elapsedRealtimeNanos() / 1000000);
-
         mLocationRequest = new LocationRequest();
         mLocationRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS);
         mLocationRequest.setFastestInterval(FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS);
@@ -108,12 +108,14 @@ public class CoordinateManager {
             if (checkPermission()) {
                 //  Log.d(TAG, "ALREADY GIVEN PERMISSION ");
                 startLocationUpdates();
-
             } else {
                 //set location permission
                 //  Log.d(TAG, "SHOW PERMISSION DIALOG");
-                ActivityCompat.requestPermissions(context
-                        , new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
+                if (getActivityCallback() == null) {
+                    Log.e("PERMISSION", "PERMISSION NOT GRANTED FOR LOCATION");
+                } else {
+                    getActivityCallback().requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
+                }
             }
         } else {
             //Log.d(TAG, "NO RUN TIME PERMISSION FOR < 6  ");
@@ -121,53 +123,57 @@ public class CoordinateManager {
         }
     }
 
-    private boolean checkPermission() {
-        int result = ContextCompat.checkSelfPermission(context
-                , android.Manifest.permission.ACCESS_FINE_LOCATION);
-        return result == PackageManager.PERMISSION_GRANTED;
+    private ActivityCallbackProvider getActivityCallback() {
+        if (activityCallback == null) {
+            return ActivityCallbackProvider.getMocker();
+        } else {
+            return activityCallback;
+        }
+    }
 
+    private boolean checkPermission() {
+        return getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION);
     }
 
     private void startLocationUpdates() {
-        // Begin by checking if the device has the necessary location settings.
-        mSettingsClient.checkLocationSettings(mLocationSettingsRequest)
-                .addOnSuccessListener(context, new OnSuccessListener<LocationSettingsResponse>() {
-                    @Override
-                    public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
-                        Log.i(TAG, "All location settings are satisfied.");
-                        //noinspection MissingPermission
-                        if (ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                            return;
+        if (getActivityCallback() == null) {
+            Log.w("", "No activity is attached to location manager");
+        } else {
+            // Begin by checking if the device has the necessary location settings.
+            getActivityCallback().checkLocationSettings(mLocationSettingsRequest)
+                    .addOnSuccessListener(new OnSuccessListener<LocationSettingsResponse>() {
+                        @Override
+                        public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
+                            Log.i(TAG, "All location settings are satisfied.");
+                            //noinspection MissingPermission
+                            if (!getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                                return;
+                            }
+                            mFusedLocationClient.requestLocationUpdates(mLocationRequest,
+                                    mLocationCallback, Looper.myLooper());
                         }
-                        mFusedLocationClient.requestLocationUpdates(mLocationRequest,
-                                mLocationCallback, Looper.myLooper());
-                    }
-                })
-                .addOnFailureListener(context, new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        int statusCode = ((ApiException) e).getStatusCode();
-                        switch (statusCode) {
-                            case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
-                                Log.i(TAG, "Location settings are not satisfied. Attempting to upgrade " +
-                                        "location settings ");
-                                try {
-                                    // Show the dialog by calling startResolutionForResult(), and check the
-                                    // result in onActivityResult().
-                                    ResolvableApiException rae = (ResolvableApiException) e;
-                                    rae.startResolutionForResult(context, REQUEST_CHECK_SETTINGS);
-                                } catch (IntentSender.SendIntentException sie) {
-                                    Log.i(TAG, "PendingIntent unable to execute request.");
-                                }
-                                break;
-                            case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
-                                mRequestingLocationUpdates = false;
-                                break;
-                            default:
-                                mRequestingLocationUpdates = false;
+                    })
+                    .addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            int statusCode = ((ApiException) e).getStatusCode();
+                            switch (statusCode) {
+                                case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
+                                    Log.i(TAG, "Location settings are not satisfied. Attempting to upgrade " +
+                                            "location settings ");
+                                    if (getActivityCallback() == null) {
+                                        Log.e("PERMISSION", "LOCATION SERVICES ARE DISABLED");
+                                    } else {
+                                        getActivityCallback().showGPSSettingDialog(e, REQUEST_CHECK_SETTINGS);
+                                    }
+                                    break;
+                                case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
+                                    break;
+                                default:
+                            }
                         }
-                    }
-                });
+                    });
+        }
     }
 
     public void onPermissionReceived(int requestCode, int resultCode) {
@@ -176,15 +182,12 @@ public class CoordinateManager {
             case REQUEST_CHECK_SETTINGS:
                 switch (resultCode) {
                     case Activity.RESULT_OK:
-                        //  Log.i(TAG, "User agreed to make required location settings changes.");
-
-                        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                        if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)) {
                             return;
                         }
                         mFusedLocationClient.requestLocationUpdates(mLocationRequest
                                 , mLocationCallback, Looper.myLooper());
                         break;
-
                     case Activity.RESULT_CANCELED:
                         break;
                     default:
@@ -198,17 +201,12 @@ public class CoordinateManager {
         switch (requestCode) {
             case REQUEST_PERMISSIONS_REQUEST_CODE:
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // Log.d(TAG, "CLICKED ALLOW PERMISSION GRANTED ");
                     startLocationUpdates();
                     grantedPermission = true;
                 } else {
-                    //  noPermisAlert();
-                    // Log.d(TAG, "CLICKED  DENIED & DONT ALLOW ");
                 }
                 break;
             default:
-                //noPermisAlert();
-//        }
         }
     }
 
@@ -313,10 +311,9 @@ public class CoordinateManager {
         if (mFusedLocationClient != null) {
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
             mFusedLocationClient.removeLocationUpdates(mLocationCallback)
-                    .addOnCompleteListener(context, new OnCompleteListener<Void>() {
+                    .addOnCompleteListener(new OnCompleteListener<Void>() {
                         @Override
                         public void onComplete(@NonNull Task<Void> task) {
-                            mRequestingLocationUpdates = false;
 
                         }
                     });
