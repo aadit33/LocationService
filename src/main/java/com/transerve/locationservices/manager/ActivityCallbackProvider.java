@@ -21,8 +21,10 @@ public class ActivityCallbackProvider {
     private SettingsClient settingsClient;
 
     public ActivityCallbackProvider(Activity activity) {
-        this.activity = activity;
-        settingsClient = LocationServices.getSettingsClient(activity);
+        if (activity != null) {
+            this.activity = activity;
+            settingsClient = LocationServices.getSettingsClient(activity);
+        }
     }
 
     public static ActivityCallbackProvider getMocker() {
