@@ -43,7 +43,7 @@ public class KalmanLatLong {
 	}
 
 	// / <summary>
-	// / Kalman filter processing for lattitude and longitude
+	// / Kalman filter processing for lattitude and longitude ///
 	// / </summary>
 	// / <param name="lat_measurement_degrees">new measurement of
 	// lattidude</param>
