@@ -109,7 +109,7 @@ public class CoordinateManager {
     }
 
     private void setRunTimePermission() {
-        if (Build.VERSION.SDK_INT >= M) {
+        if (getActivityCallback().isAttached() && Build.VERSION.SDK_INT >= M) {
             if (checkPermission()) {
                 //  Log.d(TAG, "ALREADY GIVEN PERMISSION ");
                 startLocationUpdates();
@@ -123,7 +123,7 @@ public class CoordinateManager {
                 }
             }
         } else {
-            //Log.d(TAG, "NO RUN TIME PERMISSION FOR < 6  ");
+            Log.e(TAG, "SKIPPING PERMISSION CHECK NO ACTIVITY ATTACHED ");
             startLocationUpdates();
         }
     }
@@ -162,9 +162,11 @@ public class CoordinateManager {
                             Log.i(TAG, "All location settings are satisfied.");
                             //noinspection MissingPermission
                             if (!getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
-                                return;
+                                getActivityCallback().requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
                             }
-                            requestLocationUpdates();
+                            else {
+                                requestLocationUpdates();
+                            }
                         }
                     })
                     .addOnFailureListener(new OnFailureListener() {

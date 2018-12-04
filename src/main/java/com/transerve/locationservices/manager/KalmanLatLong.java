@@ -8,8 +8,8 @@ public class KalmanLatLong {
 	private double lat;
 	private double lng;
 	private float variance; // P matrix. Negative means object uninitialised.
-							// NB: units irrelevant, as long as same units used
-							// throughout
+	// NB: units irrelevant, as long as same units used
+	// throughout
 	public int consecutiveRejectCount;
 
 	public KalmanLatLong(float Q_metres_per_second) {
@@ -35,7 +35,7 @@ public class KalmanLatLong {
 	}
 
 	public void SetState(double lat, double lng, float accuracy,
-			long TimeStamp_milliseconds) {
+						 long TimeStamp_milliseconds) {
 		this.lat = lat;
 		this.lng = lng;
 		variance = accuracy * accuracy;
@@ -53,9 +53,9 @@ public class KalmanLatLong {
 	// / <param name="TimeStamp_milliseconds">time of measurement</param>
 	// / <returns>new state</returns>
 	public void Process(double lat_measurement, double lng_measurement,
-			float accuracy, long TimeStamp_milliseconds, float Q_metres_per_second) {
+						float accuracy, long TimeStamp_milliseconds, float Q_metres_per_second) {
 		this.Q_metres_per_second = Q_metres_per_second;
-		
+
 		if (accuracy < MinAccuracy)
 			accuracy = MinAccuracy;
 		if (variance < 0) {
@@ -100,6 +100,6 @@ public class KalmanLatLong {
 	public void setConsecutiveRejectCount(int consecutiveRejectCount) {
 		this.consecutiveRejectCount = consecutiveRejectCount;
 	}
-	
-	
+
+
 }
