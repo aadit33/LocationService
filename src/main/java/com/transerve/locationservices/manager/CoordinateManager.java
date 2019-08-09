@@ -288,6 +288,7 @@ public class CoordinateManager {
         Location predictedLocation = new Location("");//provider name is unecessary
         predictedLocation.setLatitude(predictedLat);//your coords of course
         predictedLocation.setLongitude(predictedLng);
+        predictedLocation.setAccuracy(kalmanFilter.get_accuracy());
         float predictedDeltaInMeters = predictedLocation.distanceTo(location);
 
         if (predictedDeltaInMeters > 60) {
