@@ -148,8 +148,7 @@ public class CoordinateManager {
             //have the context but it might be running in the background
             try {
                 requestLocationUpdates();
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 Log.e(TAG, "startLocationUpdates: Error occurred might be since there is no activity attached");
                 locationUpdateStarted = false;
             }
@@ -163,8 +162,7 @@ public class CoordinateManager {
                             //noinspection MissingPermission
                             if (!getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
                                 getActivityCallback().requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
-                            }
-                            else {
+                            } else {
                                 requestLocationUpdates();
                             }
                         }
@@ -262,7 +260,10 @@ public class CoordinateManager {
         float horizontalAccuracy = location.getAccuracy();
         if (horizontalAccuracy > 10) { //10meter filter
             // inaccurateLocationList.add(location);
-            disposeBag.notifyAll(new TTNewLocation(location.getLatitude(), location.getLongitude(), false, location.getAccuracy(), location.getBearing(),location.getAltitude()));            return false;
+            TTNewLocation newLocation = new TTNewLocation(location.getLatitude(), location.getLongitude(), false, location.getAccuracy(), location.getBearing(), location.getAltitude());
+            newLocation.setTag(location);
+            disposeBag.notifyAll(newLocation);
+            return false;
         }
 
 
@@ -286,6 +287,7 @@ public class CoordinateManager {
         predictedLocation.setLatitude(predictedLat);//your coords of course
         predictedLocation.setLongitude(predictedLng);
         predictedLocation.setAccuracy(kalmanFilter.get_accuracy());
+        predictedLocation.setBearing(location.getBearing());
         float predictedDeltaInMeters = predictedLocation.distanceTo(location);
 
         if (predictedDeltaInMeters > 60) {
@@ -305,9 +307,12 @@ public class CoordinateManager {
                 + "lon" + predictedLocation.getLongitude());
         Log.d(TAG, "Location quality is good enough.");
         //Code to notify all observers that we got a good location
-        disposeBag.notifyAll(new TTNewLocation(predictedLocation.getLatitude()
+        TTNewLocation newLocation = new TTNewLocation(predictedLocation.getLatitude()
                 , predictedLocation.getLongitude(), true, predictedLocation.getAccuracy()
-                ,location.getBearing(),location.getAltitude()));        return true;
+                , location.getBearing(), location.getAltitude());
+        newLocation.setTag(location);
+        disposeBag.notifyAll(newLocation);
+        return true;
     }
 
     public void addObserver(DisposableObserver<TTNewLocation> observer) {

@@ -4,6 +4,7 @@ public class TTNewLocation {
     private Double lat, lng,altitude;
     private Boolean isAccurate;
     private Float accuracy,bearing;
+    private Object tag;
 
     public TTNewLocation(Double lat, Double lng, Boolean isAccurate, Float accuracy, Float bearing, Double altitude) {
         this.lat = lat;
@@ -60,6 +61,14 @@ public class TTNewLocation {
 
     public void setBearing(Float bearing) {
         this.bearing = bearing;
+    }
+
+    public Object getTag() {
+        return tag;
+    }
+
+    public void setTag(Object tag) {
+        this.tag = tag;
     }
 }
 
