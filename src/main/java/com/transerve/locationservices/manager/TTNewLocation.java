@@ -1,15 +1,17 @@
 package com.transerve.locationservices.manager;
 
 public class TTNewLocation {
-    private Double lat, lng;
+    private Double lat, lng,altitude;
     private Boolean isAccurate;
-    private Float accuracy;
+    private Float accuracy,bearing;
 
-    public TTNewLocation(Double lat, Double lng, Boolean isAccurate, Float accuracy) {
+    public TTNewLocation(Double lat, Double lng, Boolean isAccurate, Float accuracy, Float bearing, Double altitude) {
         this.lat = lat;
         this.lng = lng;
         this.isAccurate = isAccurate;
         this.accuracy = accuracy;
+        this.bearing = bearing;
+        this.altitude = altitude;
     }
 
     public Double getLat() {
@@ -43,4 +45,21 @@ public class TTNewLocation {
     public void setAccuracy(Float accuracy) {
         this.accuracy = accuracy;
     }
+
+    public Double getAltitude() {
+        return altitude;
+    }
+
+    public void setAltitude(Double altitude) {
+        this.altitude = altitude;
+    }
+
+    public Float getBearing() {
+        return bearing;
+    }
+
+    public void setBearing(Float bearing) {
+        this.bearing = bearing;
+    }
 }
+
