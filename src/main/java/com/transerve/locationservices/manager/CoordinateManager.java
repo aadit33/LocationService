@@ -4,19 +4,23 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
-import android.content.IntentSender;
+import android.content.Context;
 import android.content.pm.PackageManager;
+import android.location.GnssStatus;
+import android.location.GpsStatus;
 import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.location.LocationProvider;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.support.annotation.NonNull;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
+import android.support.annotation.RequiresApi;
 import android.util.Log;
 
 import com.google.android.gms.common.api.ApiException;
-import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -25,18 +29,18 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsResponse;
 import com.google.android.gms.location.LocationSettingsStatusCodes;
-import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.List;
 
-import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.observers.DisposableObserver;
-import io.reactivex.subjects.BehaviorSubject;
 
 import static android.os.Build.VERSION_CODES.M;
 
@@ -58,10 +62,18 @@ public class CoordinateManager {
     long runStartTimeInMillis;
     float currentSpeed = 0.0f; // meters/second
     private LocationObserver disposeBag;
+    private LocationManager locationManager;
+    private LocationListener locationListener = null;
+    private GpsStatus.NmeaListener nmeaListener = null;
+    private GnssStatus.Callback mGnssStatusListener;
+    private JSONObject object;
 
     public CoordinateManager(Application application) {
         disposeBag = new LocationObserver();
+        object = new JSONObject();
+        registerListener();
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(application);
+        locationManager = (LocationManager) application.getSystemService(Context.LOCATION_SERVICE);
         kalmanFilter = new KalmanLatLong(3);
         // Kick off the process of building the LocationCallback, LocationRequest, and
         // LocationSettingsRequest objects.
@@ -72,6 +84,63 @@ public class CoordinateManager {
         activityCallback = ActivityCallbackProvider.getMocker();
         locationUpdateStarted = false;
     }
+
+    private void addStatusListener() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            addGnssStatusListener();
+        } else {
+            //   addLegacyStatusListener();
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    private void addGnssStatusListener() {
+        mGnssStatusListener = new GnssStatus.Callback() {
+            @Override
+            public void onSatelliteStatusChanged(GnssStatus status) {
+                updateGnssStatus(status);
+            }
+        };
+        if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            return;
+        }
+        locationManager.registerGnssStatusCallback(mGnssStatusListener);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    private void updateGnssStatus(GnssStatus status){
+        int mSvCount = 0;
+        int mUsedInFixCount = 0;
+        final int length = status.getSatelliteCount();
+
+        while (mSvCount < length) {
+           SatelliteStatus satStatus = new SatelliteStatus(status.getSvid(mSvCount), GpsTestUtil.getGnssConstellationType(status.getConstellationType(mSvCount)),
+                    status.getCn0DbHz(mSvCount),
+                    status.hasAlmanacData(mSvCount),
+                    status.hasEphemerisData(mSvCount),
+                    status.usedInFix(mSvCount),
+                    status.getElevationDegrees(mSvCount),
+                    status.getAzimuthDegrees(mSvCount));
+            if (GpsTestUtil.isGnssCarrierFrequenciesSupported()) {
+                if (status.hasCarrierFrequencyHz(mSvCount)) {
+                    satStatus.setHasCarrierFrequency(true);
+                    satStatus.setCarrierFrequencyH(status.getCarrierFrequencyHz(mSvCount));
+                }
+            }
+
+            if (satStatus.getUsedInFix()) {
+                mUsedInFixCount++;
+            }
+
+            mSvCount++;
+        }
+        try {
+            object.put("SATELLITE_COUNT",mSvCount);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
 
     public void activityAttached(Activity activity) {
         activityCallback = new ActivityCallbackProvider(activity);
@@ -148,12 +217,14 @@ public class CoordinateManager {
             //have the context but it might be running in the background
             try {
                 requestLocationUpdates();
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 Log.e(TAG, "startLocationUpdates: Error occurred might be since there is no activity attached");
                 locationUpdateStarted = false;
             }
         } else {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 0, locationListener);
+            locationManager.addNmeaListener(nmeaListener);
+            addStatusListener();
             // Begin by checking if the device has the necessary location settings.
             getActivityCallback().checkLocationSettings(mLocationSettingsRequest)
                     .addOnSuccessListener(new OnSuccessListener<LocationSettingsResponse>() {
@@ -262,7 +333,7 @@ public class CoordinateManager {
         if (horizontalAccuracy > 10) { //10meter filter
             Log.d(TAG, "Accuracy is too low.");
             // inaccurateLocationList.add(location);
-            disposeBag.notifyAll(new TTNewLocation(location.getLatitude(), location.getLongitude(), false, location.getAccuracy()));
+            disposeBag.notifyAll(new TTNewLocation(location.getLatitude(), location.getLongitude(), false, location.getAccuracy(), location.getBearing(), location.getAltitude(), object));
             return false;
         }
 
@@ -286,6 +357,7 @@ public class CoordinateManager {
         Location predictedLocation = new Location("");//provider name is unecessary
         predictedLocation.setLatitude(predictedLat);//your coords of course
         predictedLocation.setLongitude(predictedLng);
+        predictedLocation.setAccuracy(kalmanFilter.get_accuracy());
         float predictedDeltaInMeters = predictedLocation.distanceTo(location);
 
         if (predictedDeltaInMeters > 60) {
@@ -305,7 +377,9 @@ public class CoordinateManager {
                 + "lon" + predictedLocation.getLongitude());
         Log.d(TAG, "Location quality is good enough.");
         //Code to notify all observers that we got a good location
-        disposeBag.notifyAll(new TTNewLocation(predictedLocation.getLatitude(), predictedLocation.getLongitude(), true, predictedLocation.getAccuracy()));
+        disposeBag.notifyAll(new TTNewLocation(predictedLocation.getLatitude()
+                , predictedLocation.getLongitude(), true, predictedLocation.getAccuracy()
+                , location.getBearing(), location.getAltitude(), object));
         return true;
     }
 
@@ -327,6 +401,7 @@ public class CoordinateManager {
     }
 
 
+    @RequiresApi(api = Build.VERSION_CODES.N)
     public void stopLocationUpdates() {
         if (mFusedLocationClient != null) {
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
@@ -337,6 +412,11 @@ public class CoordinateManager {
 
                         }
                     });
+        }
+        if (locationManager != null) {
+            locationManager.unregisterGnssStatusCallback(mGnssStatusListener);
+            locationManager.removeUpdates(locationListener);
+            locationManager.removeNmeaListener(nmeaListener);
         }
     }
 
@@ -391,5 +471,53 @@ public class CoordinateManager {
                 }
             }
         }
+    }
+
+    private void registerListener() {
+        locationListener = new LocationListener() {
+
+            @Override
+            public void onLocationChanged(Location loc) {
+            }
+
+            @Override
+            public void onProviderDisabled(String provider) {
+            }
+
+            @Override
+            public void onProviderEnabled(String provider) {
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {
+                switch (status) {
+                    case LocationProvider.OUT_OF_SERVICE:
+                        break;
+                    case LocationProvider.TEMPORARILY_UNAVAILABLE:
+                        break;
+                    case LocationProvider.AVAILABLE:
+                        break;
+                }
+
+            }
+        };
+
+        nmeaListener = new GpsStatus.NmeaListener() {
+            public void onNmeaReceived(long timestamp, String message) {
+                if (message.startsWith("$GNGSA") || message.startsWith("$GPGSA")) {
+                    DilutionOfPrecision dop = NmeaUtils.getDop(message);
+                    if (dop != null) {
+                        try {
+                            object.put("HDOP", dop.getHorizontalDop());
+                            object.put("PDOP", dop.getPositionDop());
+                            object.put("VDOP", dop.getVerticalDop());
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+
+            }
+        };
     }
 }
