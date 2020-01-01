@@ -52,7 +52,7 @@ public class NmeaUtils {
             try {
                 altitude = tokens[ALTITUDE_INDEX];
             } catch (ArrayIndexOutOfBoundsException e) {
-                Log.e(TAG, "Bad NMEA sentence for geoid altitude - " + nmeaSentence + " :" + e);
+              //  Log.e(TAG, "Bad NMEA sentence for geoid altitude - " + nmeaSentence + " :" + e);
                 return null;
             }
             if (!TextUtils.isEmpty(altitude)) {
@@ -60,15 +60,15 @@ public class NmeaUtils {
                 try {
                     altitudeParsed = Double.parseDouble(altitude);
                 } catch (NumberFormatException e) {
-                    Log.e(TAG, "Bad geoid altitude value of '" + altitude + "' in NMEA sentence " + nmeaSentence + " :" + e);
+                  //  Log.e(TAG, "Bad geoid altitude value of '" + altitude + "' in NMEA sentence " + nmeaSentence + " :" + e);
                 }
                 return altitudeParsed;
             } else {
-                Log.w(TAG, "Couldn't parse geoid altitude from NMEA: " + nmeaSentence);
+             //   Log.w(TAG, "Couldn't parse geoid altitude from NMEA: " + nmeaSentence);
                 return null;
             }
         } else {
-            Log.w(TAG, "Input must be $GPGGA, $GNGNS, or $GNGGA NMEA: " + nmeaSentence);
+         //   Log.w(TAG, "Input must be $GPGGA, $GNGNS, or $GNGGA NMEA: " + nmeaSentence);
             return null;
         }
     }
@@ -100,7 +100,7 @@ public class NmeaUtils {
                 hdop = tokens[HDOP_INDEX];
                 vdop = tokens[VDOP_INDEX];
             } catch (ArrayIndexOutOfBoundsException e) {
-                Log.e(TAG, "Bad NMEA message for parsing DOP - " + nmeaSentence + " :" + e);
+             //   Log.e(TAG, "Bad NMEA message for parsing DOP - " + nmeaSentence + " :" + e);
                 return null;
             }
 
@@ -116,15 +116,15 @@ public class NmeaUtils {
                             Double.valueOf(vdop));
                 } catch (NumberFormatException e) {
                     // See https://github.com/barbeau/gpstest/issues/71#issuecomment-263169174
-                    Log.e(TAG, "Invalid DOP values in NMEA: " + nmeaSentence);
+                 //   Log.e(TAG, "Invalid DOP values in NMEA: " + nmeaSentence);
                 }
                 return dop;
             } else {
-                Log.w(TAG, "Empty DOP values in NMEA: " + nmeaSentence);
+              //  Log.w(TAG, "Empty DOP values in NMEA: " + nmeaSentence);
                 return null;
             }
         } else {
-            Log.w(TAG, "Input must be a $GNGSA NMEA: " + nmeaSentence);
+          //  Log.w(TAG, "Input must be a $GNGSA NMEA: " + nmeaSentence);
             return null;
         }
     }

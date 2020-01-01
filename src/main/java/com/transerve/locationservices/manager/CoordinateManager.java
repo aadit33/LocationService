@@ -238,7 +238,7 @@ public class CoordinateManager {
                 //set location permission
                 //  Log.d(TAG, "SHOW PERMISSION DIALOG");
                 if (!getActivityCallback().isAttached()) {
-                    Log.e("PERMISSION", "PERMISSION NOT GRANTED FOR LOCATION");
+                //    Log.e("PERMISSION", "PERMISSION NOT GRANTED FOR LOCATION");
                 } else {
                     getActivityCallback().requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
                 }
@@ -263,13 +263,13 @@ public class CoordinateManager {
 
     private void startLocationUpdates() {
         if (!getActivityCallback().isAttached()) {
-            Log.w("", "No activity is attached to location manager");
+        //    Log.w("", "No activity is attached to location manager");
             //Here we will start without checking the conditions since we don't
             //have the context but it might be running in the background
             try {
                 requestLocationUpdates();
             } catch (Exception e) {
-                Log.e(TAG, "startLocationUpdates: Error occurred might be since there is no activity attached");
+              //  Log.e(TAG, "startLocationUpdates: Error occurred might be since there is no activity attached");
                 locationUpdateStarted = false;
             }
         } else {
@@ -284,7 +284,7 @@ public class CoordinateManager {
                     .addOnSuccessListener(new OnSuccessListener<LocationSettingsResponse>() {
                         @Override
                         public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
-                            Log.i(TAG, "All location settings are satisfied.");
+                      //      Log.i(TAG, "All location settings are satisfied.");
                             //noinspection MissingPermission
                             if (!getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
                                 return;
@@ -298,10 +298,10 @@ public class CoordinateManager {
                             int statusCode = ((ApiException) e).getStatusCode();
                             switch (statusCode) {
                                 case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
-                                    Log.i(TAG, "Location settings are not satisfied. Attempting to upgrade " +
-                                            "location settings ");
+//                                    Log.i(TAG, "Location settings are not satisfied. Attempting to upgrade " +
+//                                            "location settings ");
                                     if (!getActivityCallback().isAttached()) {
-                                        Log.e("PERMISSION", "LOCATION SERVICES ARE DISABLED");
+                                     //   Log.e("PERMISSION", "LOCATION SERVICES ARE DISABLED");
                                     } else {
                                         getActivityCallback().showGPSSettingDialog(e, REQUEST_CHECK_SETTINGS);
                                     }
@@ -377,7 +377,7 @@ public class CoordinateManager {
         }
 
         if (location.getAccuracy() <= 0) {
-            Log.d(TAG, "Latitid and longitude values are invalid.");
+          //  Log.d(TAG, "Latitid and longitude values are invalid.");
             // noAccuracyLocationList.add(location);
             return false;
         }
@@ -385,7 +385,7 @@ public class CoordinateManager {
         //setAccuracy(newLocation.getAccuracy());
         float horizontalAccuracy = location.getAccuracy();
         if (horizontalAccuracy > 10) { //10meter filter
-            Log.d(TAG, "Accuracy is too low.");
+         //   Log.d(TAG, "Accuracy is too low.");
             // inaccurateLocationList.add(location);
             disposeBag.notifyAll(new TTNewLocation(location.getLatitude(), location.getLongitude(), false, location.getAccuracy(), location.getBearing(), location.getAltitude(), extraPayload));
             return false;
@@ -415,7 +415,7 @@ public class CoordinateManager {
         float predictedDeltaInMeters = predictedLocation.distanceTo(location);
 
         if (predictedDeltaInMeters > 60) {
-            Log.d(TAG, "Kalman Filter detects mal GPS, we should probably remove this from track");
+        //    Log.d(TAG, "Kalman Filter detects mal GPS, we should probably remove this from track");
             kalmanFilter.consecutiveRejectCount += 1;
 
             if (kalmanFilter.consecutiveRejectCount > 3) {
@@ -427,7 +427,7 @@ public class CoordinateManager {
             kalmanFilter.consecutiveRejectCount = 0;
         }
 
-        Log.d(TAG, "Location quality is good enough.");
+      //  Log.d(TAG, "Location quality is good enough.");
         //Code to notify all observers that we got a good location
         disposeBag.notifyAll(new TTNewLocation(predictedLocation.getLatitude()
                 , predictedLocation.getLongitude(), true, predictedLocation.getAccuracy()
