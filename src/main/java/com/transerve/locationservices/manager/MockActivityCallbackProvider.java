@@ -4,10 +4,11 @@ import android.util.Log;
 
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.tasks.Task;
+import com.transerve.locationservices.manager.utils.ActivityCallbackProvider;
 
 import static android.content.ContentValues.TAG;
 
-public class MockActivityCallbackProvider extends ActivityCallbackProvider{
+public class MockActivityCallbackProvider extends ActivityCallbackProvider {
 
     public MockActivityCallbackProvider() {
         super(null);
