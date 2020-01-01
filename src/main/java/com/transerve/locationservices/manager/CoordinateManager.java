@@ -4,19 +4,23 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
-import android.content.IntentSender;
+import android.content.Context;
 import android.content.pm.PackageManager;
+import android.location.GnssStatus;
+import android.location.GpsSatellite;
+import android.location.GpsStatus;
 import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.location.LocationProvider;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.support.annotation.NonNull;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
+import android.support.annotation.RequiresApi;
 import android.util.Log;
-
 import com.google.android.gms.common.api.ApiException;
-import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -25,19 +29,23 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsResponse;
 import com.google.android.gms.location.LocationSettingsStatusCodes;
-import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
-
+import com.transerve.locationservices.manager.models.DilutionOfPrecision;
+import com.transerve.locationservices.manager.models.SatelliteStatus;
+import com.transerve.locationservices.manager.models.TTNewLocation;
+import com.transerve.locationservices.manager.utils.ActivityCallbackProvider;
+import com.transerve.locationservices.manager.utils.GpsTestUtil;
+import com.transerve.locationservices.manager.utils.KalmanLatLong;
+import com.transerve.locationservices.manager.utils.NmeaUtils;
+import org.json.JSONException;
+import org.json.JSONObject;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
-
-import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.observers.DisposableObserver;
-import io.reactivex.subjects.BehaviorSubject;
-
 import static android.os.Build.VERSION_CODES.M;
 
 public class CoordinateManager {
@@ -47,34 +55,147 @@ public class CoordinateManager {
     private static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS =
             UPDATE_INTERVAL_IN_MILLISECONDS / 2;
     private FusedLocationProviderClient mFusedLocationClient;
-    private ActivityCallbackProvider activityCallback;
+    private com.transerve.locationservices.manager.utils.ActivityCallbackProvider activityCallback;
     private LocationRequest mLocationRequest;
     private LocationSettingsRequest mLocationSettingsRequest;
     private LocationCallback mLocationCallback;
     public static boolean grantedPermission = false;
     public static boolean locationUpdateStarted = false;
     private String TAG = "PERMISSION ";
-    KalmanLatLong kalmanFilter;
-    long runStartTimeInMillis;
-    float currentSpeed = 0.0f; // meters/second
+    private com.transerve.locationservices.manager.utils.KalmanLatLong kalmanFilter;
+    private long runStartTimeInMillis;
+    private float currentSpeed = 0.0f; // meters/second
     private LocationObserver disposeBag;
+    private LocationManager locationManager;
+    private LocationListener locationListener = null;
+    private GpsStatus.NmeaListener nmeaListener = null;
+    private GnssStatus.Callback mGnssStatusListener;
+    private GpsStatus.Listener mLegacyStatusListener;
+    private GpsStatus mLegacyStatus;
+    private JSONObject extraPayload;
+    private int mSvCount;
+    private int mUsedInFixCount;
 
     public CoordinateManager(Application application) {
         disposeBag = new LocationObserver();
+        extraPayload = new JSONObject();
+        setRunTimePermission();
+        registerListener();
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(application);
-        kalmanFilter = new KalmanLatLong(3);
+        locationManager = (LocationManager) application.getSystemService(Context.LOCATION_SERVICE);
+        kalmanFilter = new com.transerve.locationservices.manager.utils.KalmanLatLong(3);
         // Kick off the process of building the LocationCallback, LocationRequest, and
         // LocationSettingsRequest objects.
         createLocationCallback();
         createLocationRequest();
         buildLocationSettingsRequest();
-        setRunTimePermission();
-        activityCallback = ActivityCallbackProvider.getMocker();
+        activityCallback = com.transerve.locationservices.manager.utils.ActivityCallbackProvider.getMocker();
         locationUpdateStarted = false;
     }
 
+    private void addStatusListener() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            addGnssStatusListener();
+        } else {
+            addLegacyStatusListener();
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    private void addGnssStatusListener() {
+        mGnssStatusListener = new GnssStatus.Callback() {
+            @Override
+            public void onSatelliteStatusChanged(GnssStatus status) {
+                updateGnssStatus(status);
+            }
+        };
+        if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            return;
+        }
+        locationManager.registerGnssStatusCallback(mGnssStatusListener);
+    }
+
+    private void addLegacyStatusListener() {
+        mLegacyStatusListener = new GpsStatus.Listener() {
+            @SuppressLint("MissingPermission")
+            @Override
+            public void onGpsStatusChanged(int event) {
+                mLegacyStatus = locationManager.getGpsStatus(mLegacyStatus);
+
+                switch (event) {
+                    case GpsStatus.GPS_EVENT_STARTED:
+                        break;
+                    case GpsStatus.GPS_EVENT_STOPPED:
+                        break;
+                    case GpsStatus.GPS_EVENT_FIRST_FIX:
+                        break;
+                    case GpsStatus.GPS_EVENT_SATELLITE_STATUS:
+                        updateLegacyStatus(mLegacyStatus);
+                        break;
+                }
+            }
+        };
+        if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            return;
+        }
+        locationManager.addGpsStatusListener(mLegacyStatusListener);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    private void updateGnssStatus(GnssStatus status) {
+        mSvCount = 0;
+        mUsedInFixCount = 0;
+        int length = status.getSatelliteCount();
+
+        while (mSvCount < length) {
+            SatelliteStatus satStatus = new SatelliteStatus(status.getSvid(mSvCount), GpsTestUtil.getGnssConstellationType(status.getConstellationType(mSvCount)),
+                    status.getCn0DbHz(mSvCount),
+                    status.hasAlmanacData(mSvCount),
+                    status.hasEphemerisData(mSvCount),
+                    status.usedInFix(mSvCount),
+                    status.getElevationDegrees(mSvCount),
+                    status.getAzimuthDegrees(mSvCount));
+            if (GpsTestUtil.isGnssCarrierFrequenciesSupported()) {
+                if (status.hasCarrierFrequencyHz(mSvCount)) {
+                    satStatus.setHasCarrierFrequency(true);
+                    satStatus.setCarrierFrequencyH(status.getCarrierFrequencyHz(mSvCount));
+                }
+            }
+            if (satStatus.getUsedInFix()) {
+                mUsedInFixCount++;
+            }
+            mSvCount++;
+        }
+        try {
+            extraPayload.put(AppConstant.SATELLITE_COUNT, mSvCount);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void updateLegacyStatus(GpsStatus status) {
+        Iterator<GpsSatellite> satellites = status.getSatellites().iterator();
+        mSvCount = 0;
+        mUsedInFixCount = 0;
+        while (satellites.hasNext()) {
+            GpsSatellite satellite = satellites.next();
+
+            SatelliteStatus satStatus = new SatelliteStatus(satellite.getPrn(), GpsTestUtil.getGnssType(satellite.getPrn()),
+                    satellite.getSnr(),
+                    satellite.hasAlmanac(),
+                    satellite.hasEphemeris(),
+                    satellite.usedInFix(),
+                    satellite.getElevation(),
+                    satellite.getAzimuth());
+            if (satellite.usedInFix()) {
+                mUsedInFixCount++;
+            }
+            mSvCount++;
+        }
+    }
+
     public void activityAttached(Activity activity) {
-        activityCallback = new ActivityCallbackProvider(activity);
+        activityCallback = new com.transerve.locationservices.manager.utils.ActivityCallbackProvider(activity);
         if (!locationUpdateStarted) {
             startLocationUpdates();
         }
@@ -109,7 +230,7 @@ public class CoordinateManager {
     }
 
     private void setRunTimePermission() {
-        if (getActivityCallback().isAttached() && Build.VERSION.SDK_INT >= M) {
+        if (Build.VERSION.SDK_INT >= M) {
             if (checkPermission()) {
                 //  Log.d(TAG, "ALREADY GIVEN PERMISSION ");
                 startLocationUpdates();
@@ -123,12 +244,12 @@ public class CoordinateManager {
                 }
             }
         } else {
-            Log.e(TAG, "SKIPPING PERMISSION CHECK NO ACTIVITY ATTACHED ");
+            //Log.d(TAG, "NO RUN TIME PERMISSION FOR < 6  ");
             startLocationUpdates();
         }
     }
 
-    private ActivityCallbackProvider getActivityCallback() {
+    private com.transerve.locationservices.manager.utils.ActivityCallbackProvider getActivityCallback() {
         if (activityCallback == null) {
             return ActivityCallbackProvider.getMocker();
         } else {
@@ -140,7 +261,6 @@ public class CoordinateManager {
         return getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION);
     }
 
-    @SuppressLint("MissingPermission")
     private void startLocationUpdates() {
         if (!getActivityCallback().isAttached()) {
             Log.w("", "No activity is attached to location manager");
@@ -153,6 +273,12 @@ public class CoordinateManager {
                 locationUpdateStarted = false;
             }
         } else {
+            if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                return;
+            }
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 0, locationListener);
+            locationManager.addNmeaListener(nmeaListener);
+            addStatusListener();
             // Begin by checking if the device has the necessary location settings.
             getActivityCallback().checkLocationSettings(mLocationSettingsRequest)
                     .addOnSuccessListener(new OnSuccessListener<LocationSettingsResponse>() {
@@ -161,10 +287,9 @@ public class CoordinateManager {
                             Log.i(TAG, "All location settings are satisfied.");
                             //noinspection MissingPermission
                             if (!getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
-                                getActivityCallback().requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
-                            } else {
-                                requestLocationUpdates();
+                                return;
                             }
+                            requestLocationUpdates();
                         }
                     })
                     .addOnFailureListener(new OnFailureListener() {
@@ -252,6 +377,7 @@ public class CoordinateManager {
         }
 
         if (location.getAccuracy() <= 0) {
+            Log.d(TAG, "Latitid and longitude values are invalid.");
             // noAccuracyLocationList.add(location);
             return false;
         }
@@ -259,10 +385,9 @@ public class CoordinateManager {
         //setAccuracy(newLocation.getAccuracy());
         float horizontalAccuracy = location.getAccuracy();
         if (horizontalAccuracy > 10) { //10meter filter
+            Log.d(TAG, "Accuracy is too low.");
             // inaccurateLocationList.add(location);
-            TTNewLocation newLocation = new TTNewLocation(location.getLatitude(), location.getLongitude(), false, location.getAccuracy(), location.getBearing(), location.getAltitude());
-            newLocation.setTag(location);
-            disposeBag.notifyAll(newLocation);
+            disposeBag.notifyAll(new TTNewLocation(location.getLatitude(), location.getLongitude(), false, location.getAccuracy(), location.getBearing(), location.getAltitude(), extraPayload));
             return false;
         }
 
@@ -287,7 +412,6 @@ public class CoordinateManager {
         predictedLocation.setLatitude(predictedLat);//your coords of course
         predictedLocation.setLongitude(predictedLng);
         predictedLocation.setAccuracy(kalmanFilter.get_accuracy());
-        predictedLocation.setBearing(location.getBearing());
         float predictedDeltaInMeters = predictedLocation.distanceTo(location);
 
         if (predictedDeltaInMeters > 60) {
@@ -303,15 +427,11 @@ public class CoordinateManager {
             kalmanFilter.consecutiveRejectCount = 0;
         }
 
-        System.out.println("lat" + predictedLocation.getLatitude()
-                + "lon" + predictedLocation.getLongitude());
         Log.d(TAG, "Location quality is good enough.");
         //Code to notify all observers that we got a good location
-        TTNewLocation newLocation = new TTNewLocation(predictedLocation.getLatitude()
+        disposeBag.notifyAll(new TTNewLocation(predictedLocation.getLatitude()
                 , predictedLocation.getLongitude(), true, predictedLocation.getAccuracy()
-                , location.getBearing(), location.getAltitude());
-        newLocation.setTag(location);
-        disposeBag.notifyAll(newLocation);
+                , predictedLocation.getBearing(), predictedLocation.getAltitude(), extraPayload));
         return true;
     }
 
@@ -332,7 +452,7 @@ public class CoordinateManager {
         disposeBag.clear();
     }
 
-
+    @RequiresApi(api = Build.VERSION_CODES.N)
     public void stopLocationUpdates() {
         if (mFusedLocationClient != null) {
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
@@ -343,6 +463,11 @@ public class CoordinateManager {
 
                         }
                     });
+        }
+        if (locationManager != null) {
+            locationManager.unregisterGnssStatusCallback(mGnssStatusListener);
+            locationManager.removeUpdates(locationListener);
+            locationManager.removeNmeaListener(nmeaListener);
         }
     }
 
@@ -397,5 +522,53 @@ public class CoordinateManager {
                 }
             }
         }
+    }
+
+    private void registerListener() {
+        locationListener = new LocationListener() {
+
+            @Override
+            public void onLocationChanged(Location loc) {
+            }
+
+            @Override
+            public void onProviderDisabled(String provider) {
+            }
+
+            @Override
+            public void onProviderEnabled(String provider) {
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {
+                switch (status) {
+                    case LocationProvider.OUT_OF_SERVICE:
+                        break;
+                    case LocationProvider.TEMPORARILY_UNAVAILABLE:
+                        break;
+                    case LocationProvider.AVAILABLE:
+                        break;
+                }
+
+            }
+        };
+
+        nmeaListener = new GpsStatus.NmeaListener() {
+            public void onNmeaReceived(long timestamp, String message) {
+                if (message.startsWith(AppConstant.NM_GNGSA) || message.startsWith(AppConstant.NM_GPGSA)) {
+                    DilutionOfPrecision dop = NmeaUtils.getDop(message);
+                    if (dop != null) {
+                        try {
+                            extraPayload.put(AppConstant.HDOP_VALUE, dop.getHorizontalDop());
+                            extraPayload.put(AppConstant.PDOP_VALUE, dop.getPositionDop());
+                            extraPayload.put(AppConstant.VDOP_VALUE, dop.getVerticalDop());
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+
+            }
+        };
     }
 }

@@ -1,18 +1,21 @@
-package com.transerve.locationservices.manager;
+package com.transerve.locationservices.manager.models;
+
+import org.json.JSONObject;
 
 public class TTNewLocation {
     private Double lat, lng,altitude;
     private Boolean isAccurate;
     private Float accuracy,bearing;
-    private Object tag;
+    private JSONObject extraPayload;
 
-    public TTNewLocation(Double lat, Double lng, Boolean isAccurate, Float accuracy, Float bearing, Double altitude) {
+    public TTNewLocation(Double lat, Double lng, Boolean isAccurate, Float accuracy, Float bearing, Double altitude, JSONObject extraPayload) {
         this.lat = lat;
         this.lng = lng;
         this.isAccurate = isAccurate;
         this.accuracy = accuracy;
         this.bearing = bearing;
         this.altitude = altitude;
+        this.extraPayload = extraPayload;
     }
 
     public Double getLat() {
@@ -63,12 +66,11 @@ public class TTNewLocation {
         this.bearing = bearing;
     }
 
-    public Object getTag() {
-        return tag;
+    public JSONObject getExtraPayload() {
+        return extraPayload;
     }
 
-    public void setTag(Object tag) {
-        this.tag = tag;
+    public void setExtraPayload(JSONObject extraPayload) {
+        this.extraPayload = extraPayload;
     }
 }
-
