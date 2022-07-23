@@ -17,9 +17,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.support.annotation.NonNull;
-import android.support.annotation.RequiresApi;
+import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
+import androidx.core.app.ActivityCompat;
 import android.util.Log;
+
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
@@ -29,6 +31,7 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsResponse;
 import com.google.android.gms.location.LocationSettingsStatusCodes;
+import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
@@ -40,12 +43,16 @@ import com.transerve.locationservices.manager.utils.ActivityCallbackProvider;
 import com.transerve.locationservices.manager.utils.GpsTestUtil;
 import com.transerve.locationservices.manager.utils.KalmanLatLong;
 import com.transerve.locationservices.manager.utils.NmeaUtils;
+
 import org.json.JSONException;
 import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+
 import io.reactivex.observers.DisposableObserver;
+
 import static android.os.Build.VERSION_CODES.M;
 
 public class CoordinateManager {
@@ -55,14 +62,14 @@ public class CoordinateManager {
     private static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS =
             UPDATE_INTERVAL_IN_MILLISECONDS / 2;
     private FusedLocationProviderClient mFusedLocationClient;
-    private com.transerve.locationservices.manager.utils.ActivityCallbackProvider activityCallback;
+    private ActivityCallbackProvider activityCallback;
     private LocationRequest mLocationRequest;
     private LocationSettingsRequest mLocationSettingsRequest;
     private LocationCallback mLocationCallback;
     public static boolean grantedPermission = false;
     public static boolean locationUpdateStarted = false;
     private String TAG = "PERMISSION ";
-    private com.transerve.locationservices.manager.utils.KalmanLatLong kalmanFilter;
+    private KalmanLatLong kalmanFilter;
     private long runStartTimeInMillis;
     private float currentSpeed = 0.0f; // meters/second
     private LocationObserver disposeBag;
@@ -83,13 +90,13 @@ public class CoordinateManager {
         registerListener();
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(application);
         locationManager = (LocationManager) application.getSystemService(Context.LOCATION_SERVICE);
-        kalmanFilter = new com.transerve.locationservices.manager.utils.KalmanLatLong(3);
+        kalmanFilter = new KalmanLatLong(3);
         // Kick off the process of building the LocationCallback, LocationRequest, and
         // LocationSettingsRequest objects.
         createLocationCallback();
         createLocationRequest();
         buildLocationSettingsRequest();
-        activityCallback = com.transerve.locationservices.manager.utils.ActivityCallbackProvider.getMocker();
+        activityCallback = ActivityCallbackProvider.getMocker();
         locationUpdateStarted = false;
     }
 
@@ -195,7 +202,7 @@ public class CoordinateManager {
     }
 
     public void activityAttached(Activity activity) {
-        activityCallback = new com.transerve.locationservices.manager.utils.ActivityCallbackProvider(activity);
+        activityCallback = new ActivityCallbackProvider(activity);
         if (!locationUpdateStarted) {
             startLocationUpdates();
         }
@@ -217,10 +224,12 @@ public class CoordinateManager {
 
     private void createLocationRequest() {
         runStartTimeInMillis = (long) (SystemClock.elapsedRealtimeNanos() / 1000000);
-        mLocationRequest = new LocationRequest();
-        mLocationRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS);
-        mLocationRequest.setFastestInterval(FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS);
-        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+
+        mLocationRequest = LocationRequest.create()
+                .setInterval(UPDATE_INTERVAL_IN_MILLISECONDS)
+                .setFastestInterval(FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS)
+                .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                .setMaxWaitTime(100);
     }
 
     private void buildLocationSettingsRequest() {
@@ -238,9 +247,9 @@ public class CoordinateManager {
                 //set location permission
                 //  Log.d(TAG, "SHOW PERMISSION DIALOG");
                 if (!getActivityCallback().isAttached()) {
-                //    Log.e("PERMISSION", "PERMISSION NOT GRANTED FOR LOCATION");
+                    Log.e("PERMISSION", "PERMISSION NOT GRANTED FOR LOCATION");
                 } else {
-                    getActivityCallback().requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
+                    getActivityCallback().requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
                 }
             }
         } else {
@@ -249,7 +258,7 @@ public class CoordinateManager {
         }
     }
 
-    private com.transerve.locationservices.manager.utils.ActivityCallbackProvider getActivityCallback() {
+    private ActivityCallbackProvider getActivityCallback() {
         if (activityCallback == null) {
             return ActivityCallbackProvider.getMocker();
         } else {
@@ -258,22 +267,24 @@ public class CoordinateManager {
     }
 
     private boolean checkPermission() {
-        return getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION);
+        return getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION);
     }
 
     private void startLocationUpdates() {
         if (!getActivityCallback().isAttached()) {
-        //    Log.w("", "No activity is attached to location manager");
+            Log.w("", "No activity is attached to location manager");
             //Here we will start without checking the conditions since we don't
             //have the context but it might be running in the background
             try {
                 requestLocationUpdates();
             } catch (Exception e) {
-              //  Log.e(TAG, "startLocationUpdates: Error occurred might be since there is no activity attached");
+                Log.e(TAG, "startLocationUpdates: Error occurred might be since there is no activity attached");
                 locationUpdateStarted = false;
             }
         } else {
             if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                getActivityCallback().requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
+
                 return;
             }
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 0, locationListener);
@@ -284,9 +295,9 @@ public class CoordinateManager {
                     .addOnSuccessListener(new OnSuccessListener<LocationSettingsResponse>() {
                         @Override
                         public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
-                      //      Log.i(TAG, "All location settings are satisfied.");
+                            Log.i(TAG, "All location settings are satisfied.");
                             //noinspection MissingPermission
-                            if (!getActivityCallback().checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                            if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
                                 return;
                             }
                             requestLocationUpdates();
@@ -298,10 +309,10 @@ public class CoordinateManager {
                             int statusCode = ((ApiException) e).getStatusCode();
                             switch (statusCode) {
                                 case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
-//                                    Log.i(TAG, "Location settings are not satisfied. Attempting to upgrade " +
-//                                            "location settings ");
+                                    Log.i(TAG, "Location settings are not satisfied. Attempting to upgrade " +
+                                            "location settings ");
                                     if (!getActivityCallback().isAttached()) {
-                                     //   Log.e("PERMISSION", "LOCATION SERVICES ARE DISABLED");
+                                        Log.e("PERMISSION", "LOCATION SERVICES ARE DISABLED");
                                     } else {
                                         getActivityCallback().showGPSSettingDialog(e, REQUEST_CHECK_SETTINGS);
                                     }
@@ -321,7 +332,7 @@ public class CoordinateManager {
             case REQUEST_CHECK_SETTINGS:
                 switch (resultCode) {
                     case Activity.RESULT_OK:
-                        if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                        if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
                             return;
                         }
                         requestLocationUpdates();
@@ -377,7 +388,7 @@ public class CoordinateManager {
         }
 
         if (location.getAccuracy() <= 0) {
-          //  Log.d(TAG, "Latitid and longitude values are invalid.");
+            Log.d(TAG, "Latitid and longitude values are invalid.");
             // noAccuracyLocationList.add(location);
             return false;
         }
@@ -385,7 +396,7 @@ public class CoordinateManager {
         //setAccuracy(newLocation.getAccuracy());
         float horizontalAccuracy = location.getAccuracy();
         if (horizontalAccuracy > 10) { //10meter filter
-         //   Log.d(TAG, "Accuracy is too low.");
+            Log.d(TAG, "Accuracy is too low.");
             // inaccurateLocationList.add(location);
             disposeBag.notifyAll(new TTNewLocation(location.getLatitude(), location.getLongitude(), false, location.getAccuracy(), location.getBearing(), location.getAltitude(), extraPayload));
             return false;
@@ -415,7 +426,7 @@ public class CoordinateManager {
         float predictedDeltaInMeters = predictedLocation.distanceTo(location);
 
         if (predictedDeltaInMeters > 60) {
-        //    Log.d(TAG, "Kalman Filter detects mal GPS, we should probably remove this from track");
+            Log.d(TAG, "Kalman Filter detects mal GPS, we should probably remove this from track");
             kalmanFilter.consecutiveRejectCount += 1;
 
             if (kalmanFilter.consecutiveRejectCount > 3) {
@@ -427,7 +438,7 @@ public class CoordinateManager {
             kalmanFilter.consecutiveRejectCount = 0;
         }
 
-      //  Log.d(TAG, "Location quality is good enough.");
+        Log.d(TAG, "Location quality is good enough.");
         //Code to notify all observers that we got a good location
         disposeBag.notifyAll(new TTNewLocation(predictedLocation.getLatitude()
                 , predictedLocation.getLongitude(), true, predictedLocation.getAccuracy()

@@ -3,8 +3,8 @@ package com.transerve.locationservices.manager.utils;
 import android.app.Activity;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import android.util.Log;
 
 import com.google.android.gms.common.api.ResolvableApiException;

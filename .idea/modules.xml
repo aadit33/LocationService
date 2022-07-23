@@ -3,6 +3,9 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/LocationService.iml" filepath="$PROJECT_DIR$/LocationService.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/LocationService.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/LocationService.androidTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/LocationService.main.iml" filepath="$PROJECT_DIR$/.idea/modules/LocationService.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/LocationService.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/LocationService.unitTest.iml" />
     </modules>
   </component>
 </project>
