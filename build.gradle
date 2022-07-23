@@ -9,7 +9,7 @@ buildscript {
         maven { url 'https://jitpack.io' }
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:3.5.4'
+        classpath 'com.android.tools.build:gradle:4.1.2'
         classpath 'com.github.dcendents:android-maven-plugin:1.0'
 
 
@@ -46,7 +46,6 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-
 }
 def googlePlayServicesVersion = "20.0.0"
 def rxJavaVersion = "2.2.11"
@@ -59,4 +58,18 @@ dependencies {
     implementation "com.google.android.gms:play-services-location:$googlePlayServicesVersion"
     implementation "io.reactivex.rxjava2:rxjava:$rxJavaVersion"
     implementation "io.reactivex.rxjava2:rxandroid:$rxAndroidVersion"
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+
+                groupId = 'com.github.aadit33'
+                artifactId = 'LocationService'
+                version = '1.9.6'
+            }
+        }
+    }
 }
