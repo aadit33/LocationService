@@ -3,8 +3,10 @@ package com.transerve.locationservices.manager.utils;
 import android.app.Activity;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
+
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
 import android.util.Log;
 
 import com.google.android.gms.common.api.ResolvableApiException;
@@ -44,6 +46,17 @@ public class ActivityCallbackProvider {
         int result = ContextCompat.checkSelfPermission(activity
                 , accessFineLocation);
         return result == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public boolean checkSelfPermission(String[] strings) {
+        if (activity!= null) {
+            for (String permission : strings) {
+                int result = ContextCompat.checkSelfPermission(activity
+                        , permission);
+                return result == PackageManager.PERMISSION_GRANTED;
+            }
+        }
+        return false;
     }
 
     public void showGPSSettingDialog(Exception e, int data) {

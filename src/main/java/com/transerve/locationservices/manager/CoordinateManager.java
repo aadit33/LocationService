@@ -17,9 +17,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.os.SystemClock;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
+
 import android.util.Log;
 
 import com.google.android.gms.common.api.ApiException;
@@ -116,7 +118,12 @@ public class CoordinateManager {
                 updateGnssStatus(status);
             }
         };
-        if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+        if (!getActivityCallback().checkSelfPermission(
+                new String[]{
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                })
+        ) {
             return;
         }
         locationManager.registerGnssStatusCallback(mGnssStatusListener);
@@ -142,7 +149,12 @@ public class CoordinateManager {
                 }
             }
         };
-        if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+        if (!getActivityCallback().checkSelfPermission(
+                new String[]{
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                })
+        ) {
             return;
         }
         locationManager.addGpsStatusListener(mLegacyStatusListener);
@@ -249,7 +261,11 @@ public class CoordinateManager {
                 if (!getActivityCallback().isAttached()) {
                     Log.e("PERMISSION", "PERMISSION NOT GRANTED FOR LOCATION");
                 } else {
-                    getActivityCallback().requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
+                    getActivityCallback().requestPermissions(
+                            new String[]{
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                            }, REQUEST_PERMISSIONS_REQUEST_CODE);
                 }
             }
         } else {
@@ -267,7 +283,13 @@ public class CoordinateManager {
     }
 
     private boolean checkPermission() {
-        return getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION);
+        //return getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION);
+        return getActivityCallback().checkSelfPermission(
+                new String[]{
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                }
+        );
     }
 
     private void startLocationUpdates() {
@@ -282,14 +304,27 @@ public class CoordinateManager {
                 locationUpdateStarted = false;
             }
         } else {
-            if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
-                getActivityCallback().requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PERMISSIONS_REQUEST_CODE);
+            if (!getActivityCallback().checkSelfPermission(
+                    new String[]{
+                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                    })) {
+                getActivityCallback().requestPermissions(
+                        new String[]{
+                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                                Manifest.permission.ACCESS_FINE_LOCATION
+                        }, REQUEST_PERMISSIONS_REQUEST_CODE);
 
                 return;
             }
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 0, locationListener);
+            locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    5000,
+                    0,
+                    locationListener
+            );
             locationManager.addNmeaListener(nmeaListener);
-            addStatusListener();
+            //  addStatusListener();
             // Begin by checking if the device has the necessary location settings.
             getActivityCallback().checkLocationSettings(mLocationSettingsRequest)
                     .addOnSuccessListener(new OnSuccessListener<LocationSettingsResponse>() {
@@ -297,7 +332,12 @@ public class CoordinateManager {
                         public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
                             Log.i(TAG, "All location settings are satisfied.");
                             //noinspection MissingPermission
-                            if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                            if (!getActivityCallback().checkSelfPermission(
+                                    new String[]{
+                                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                                            Manifest.permission.ACCESS_FINE_LOCATION
+                                    })
+                            ) {
                                 return;
                             }
                             requestLocationUpdates();
@@ -332,7 +372,12 @@ public class CoordinateManager {
             case REQUEST_CHECK_SETTINGS:
                 switch (resultCode) {
                     case Activity.RESULT_OK:
-                        if (!getActivityCallback().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                        if (!getActivityCallback().checkSelfPermission(
+                                new String[]{
+                                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                                        Manifest.permission.ACCESS_FINE_LOCATION
+                                })
+                        ) {
                             return;
                         }
                         requestLocationUpdates();
